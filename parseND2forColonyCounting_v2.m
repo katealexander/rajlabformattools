@@ -1,81 +1,133 @@
-function [] = parseND2forColonyCounting_v2(scanFile, scanDim, varargin)
-    p = inputParser;
+function [] = parseND2ForColonyCounting_v2(inDir, dimensions, varargin)
+% Script to take scan acquired using Nikon elements and convert to
+% tiff format compatible with Rajlab image tools. Require bfmatlab code is in
+% your matlab path for reading nd2 files. The bfmatlab code can be
+% downloaded here https://docs.openmicroscopy.org/bio-formats/5.7.3/developers/matlab-dev.html
+% Includes options to specify scanning pattern and whether or not to rotate
+% each individual image tile (occasionally a problem with ELements). 
 
-    p.addRequired('scanFile', @ischar);
-    p.addRequired('scanDim',  @(x)validateattributes(x,{'numeric'},{'size',[1 2]}));
+% Examples of usage:
+% stitchNd2ForColonyCounting('20201115_184113_906__WellA2_ChannelDAPI_Seq0003.nd2', [29, 29], 'outDir', 'WellA2')
+% stitchNd2ForColonyCounting('20201115_184113_906__WellA2_ChannelDAPI_Seq0003.nd2', [29, 29], 'outDir', 'WellA2','start', 'top left', 'snake', true, 'direction', 'horizontal')
+
+p = inputParser;
+
+p.addRequired('inDir', @ischar);
+p.addRequired('dimensions', @(x)validateattributes(x,{'numeric'}, {'size',[1 2]}));
+
+p.addParameter('outDir', '', @ischar);
+p.addParameter('scanFile', '', @ischar);
+p.addParameter('start', 'top left', @(x) assert(ismember(lower(x), {'top left', 'top right', ...
+    'bottom left', 'bottom right'}), 'Options are: "top left", "top right", "bottom left", "bottom right"'));
+p.addParameter('snake', true, @islogical);
+p.addParameter('direction', 'horizontal', @(x) assert(ismember(lower(x), {'horizontal', 'vertical'}),...
+    'Options are: "horizontal" or "vertical"'));
+p.addParameter('rotate', 0, @isnumeric);
+
+p.parse(inFile, dimensions, varargin{:});
+
+scanDim = p.Results.dimensions;
+
+if ~isempty(p.Results.outDir)
+    outDir = p.Results.outDir;
+else
+    outDir = p.Results.inDir;
+%     outDir = regexp(outDir, '[^.][a-zA-Z_0-9]+', 'match', 'once');
+    outDir = strcat(outDir,'_splitScan');
+end
+
+if ~isdir(outDir)
+    mkdir(outDir)
+end
+
+%Create matrix of how the scan was acquired. This can be updated as a
+scanMatrix = vec2mat(1:scanDim(1)*scanDim(2), scanDim(2));
+
+if strcmp(p.Results.direction, 'horizontal')
     
-    p.addParameter('inDir', '', @ischar);
-    p.addParameter('outDir', '', @ischar);
-    p.addParameter('divideX', 1, @isnumeric);
-    p.addParameter('divideY', 1, @isnumeric);
-    p.addParameter('resizeFactor', 1, @isnumeric)
-    
-    p.parse(scanFile, scanDim, varargin{:});
-    
-    scanFile = p.Results.scanFile;
-    scanDim = p.Results.scanDim;
-    divideX = p.Results.divideX;
-    divideY = p.Results.divideY;
-    resizeFactor = p.Results.resizeFactor;
-    
-    if ~isempty(p.Results.inDir)
-        inDir = p.Results.inDir;
+    if p.Results.snake
+        if ismember(p.Results.start, {'top right', 'bottom right'})
+            for i = 1:2:scanDim(1)
+                scanMatrix(i, :) = fliplr(scanMatrix(i, :));
+            end
+      elseif ismember(p.Results.start, {'top left', 'bottom left'})
+          for i = 2:2:scanDim(1)
+            scanMatrix(i, :) = fliplr(scanMatrix(i, :));
+          end  
+        end
     else
-        inDir = pwd;
-    end
-    
-    if ~isempty(p.Results.outDir)
-        outDir = p.Results.outDir;
-    else
-        outDir = fullfile(inDir, 'splitPoints');
+        if ismember(p.Results.start, {'top right', 'bottom right'})
+            scanMatrix = fliplr(scanMatrix);
+        end
     end
 
-%     %For testing
-%       scanDim = [40 100];
-%       divideX = 1;
-%       divideY = 2;
-    
-    % Make directory for  images
-    if ~exist(outDir, 'dir')
-        mkdir(outDir)
+    if ismember(p.Results.start, {'bottom left', 'bottom right'})
+        scanMatrix = flipud(scanMatrix);
     end
     
+elseif strcmp(p.Results.direction, 'vertical')
+    scanMatrix = scanMatrix.';
+    
+    if p.Results.snake
+        if ismember(p.Results.start, {'bottom right', 'bottom left'})
+            for i = 1:2:scanDim(2)
+                scanMatrix(:, i) = flipud(scanMatrix(:, i));
+            end
+      elseif ismember(p.Results.start, {'top right', 'top left'})
+          for i = 2:2:scanDim(2)
+            scanMatrix(:, i) = flipud(scanMatrix(:, i));
+          end  
+        end
+    else
+        if ismember(p.Results.start, {'bottom right', 'bottom left'})
+            scanMatrix = flipud(scanMatrix);
+        end
+    end
+    
+    if ismember(p.Results.start, {'top right', 'bottom right'})
+        scanMatrix = fliplr(scanMatrix);
+    end
+    
+end
+
+tiles = scanMatrix(:);
+
+% Read nd2 file and write to tiff in order expected by colonycounting_v2 
+if ~isempty(p.Results.scanFile)
+    scanFile = fullfile(inDir, p.Results.scanFile);
+    scanFiles = {scanFile};
+else
+    scanFiles = dir(fullfile(inDir, '*.nd2'));
+    scanFiles = {scanFiles.name};
+end
+
+for i = 1:numel(scanFiles)
     % Read scan file
-    reader = bfGetReader(fullfile(inDir, scanFile)); 
+    reader = bfGetReader(fullfile(inDir, scanFiles{i})); 
 
     omeMeta = reader.getMetadataStore();
     wavelengths = omeMeta.getPixelsSizeC(0).getValue(); % number of wavelength channels
     
-    %Create matrix of how the scan was acquired. This can be updated as a
-    %parameter in the future for other scan patterns. 
-    scanMatrix = vec2mat(1:scanDim(1)*scanDim(2), scanDim(2));
-    for i = 2:2:scanDim(1)
-        scanMatrix(i, :) = fliplr(scanMatrix(i, :));
-    end
-    
-    nRegions = divideX * divideY;
-    regions = cell(1,nRegions);
-    regionDim = idivide(int16(scanDim),int16([divideX divideY]), 'floor');
-    
-    for i = 1:divideX
-        for ii = 1:divideY
-            regionTiles = scanMatrix(1+((i-1)*regionDim(1)):((i)*regionDim(1)), 1+((ii-1)*regionDim(2)):((ii)*regionDim(2)));
-            regions{i+((ii-1)*divideX)} = regionTiles(:);
-            %regions{i+((ii-1)*divideX)} = regionTiles;
-        end
-    end
-    
-    for i = 1:numel(regions)
-        for ii = 1:numel(regions{i})
-            for iii = 1:wavelengths
-                reader.setSeries(regions{i}(ii)-1);
-                iPlane = reader.getIndex(0, iii - 1, 0) + 1;
-                tmpPlane  = bfGetPlane(reader, iPlane);
-                tmpPlane = imresize(tmpPlane, 1/resizeFactor);
+    for ii = 1:numel(tiles)
+        
+        for iii = 1:wavelengths
 
-                imwrite(tmpPlane, fullfile(outDir, sprintf('Scan%03d_w%d_s%d_t1.TIF', i, iii, ii)))
-            end
+        reader.setSeries(tiles(ii)-1);
+        iPlane = reader.getIndex(0, iii - 1, 0) + 1;
+        tmpPlane  = bfGetPlane(reader, iPlane);
+        
+        if ~p.Results.rotate == 0
+           tmpPlane = imrotate(tmpPlane, p.Results.rotate);
         end
-        fprintf('Finished parsing region %d\n', i);
+        
+        imwrite(tmpPlane, fullfile(outDir, sprintf('Scan%03d_w%d_s%d_t1.TIF', i, iii, ii)))
+        
+        end 
+        
     end
+    
 end
+
+
+end
+
