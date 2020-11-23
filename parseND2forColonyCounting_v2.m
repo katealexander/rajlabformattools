@@ -1,4 +1,4 @@
-function [] = parseND2ForColonyCounting_v2(inDir, dimensions, varargin)
+function [] = parseND2forColonyCounting_v2(inFile, dimensions, varargin)
 % Script to take scan acquired using Nikon elements and convert to
 % tiff format compatible with Rajlab image tools. Require bfmatlab code is in
 % your matlab path for reading nd2 files. The bfmatlab code can be
@@ -12,11 +12,10 @@ function [] = parseND2ForColonyCounting_v2(inDir, dimensions, varargin)
 
 p = inputParser;
 
-p.addRequired('inDir', @ischar);
+p.addRequired('inFile', @ischar);
 p.addRequired('dimensions', @(x)validateattributes(x,{'numeric'}, {'size',[1 2]}));
 
 p.addParameter('outDir', '', @ischar);
-p.addParameter('scanFile', '', @ischar);
 p.addParameter('start', 'top left', @(x) assert(ismember(lower(x), {'top left', 'top right', ...
     'bottom left', 'bottom right'}), 'Options are: "top left", "top right", "bottom left", "bottom right"'));
 p.addParameter('snake', true, @islogical);
@@ -31,9 +30,7 @@ scanDim = p.Results.dimensions;
 if ~isempty(p.Results.outDir)
     outDir = p.Results.outDir;
 else
-    outDir = p.Results.inDir;
-%     outDir = regexp(outDir, '[^.][a-zA-Z_0-9]+', 'match', 'once');
-    outDir = strcat(outDir,'_splitScan');
+    outDir = 'splitScan';
 end
 
 if ~isdir(outDir)
@@ -92,41 +89,30 @@ end
 
 tiles = scanMatrix(:);
 
-% Read nd2 file and write to tiff in order expected by colonycounting_v2 
-if ~isempty(p.Results.scanFile)
-    scanFile = fullfile(inDir, p.Results.scanFile);
-    scanFiles = {scanFile};
-else
-    scanFiles = dir(fullfile(inDir, '*.nd2'));
-    scanFiles = {scanFiles.name};
-end
+% Read nd2 file and write to tiff in order expected by colonycounting_v2
+reader = bfGetReader(p.Results.inFile); 
 
-for i = 1:numel(scanFiles)
-    % Read scan file
-    reader = bfGetReader(fullfile(inDir, scanFiles{i})); 
+omeMeta = reader.getMetadataStore();
+wavelengths = omeMeta.getPixelsSizeC(0).getValue(); % number of wavelength channels
 
-    omeMeta = reader.getMetadataStore();
-    wavelengths = omeMeta.getPixelsSizeC(0).getValue(); % number of wavelength channels
-    
-    for ii = 1:numel(tiles)
-        
-        for iii = 1:wavelengths
+for ii = 1:numel(tiles)
 
-        reader.setSeries(tiles(ii)-1);
-        iPlane = reader.getIndex(0, iii - 1, 0) + 1;
-        tmpPlane  = bfGetPlane(reader, iPlane);
-        
-        if ~p.Results.rotate == 0
-           tmpPlane = imrotate(tmpPlane, p.Results.rotate);
-        end
-        
-        imwrite(tmpPlane, fullfile(outDir, sprintf('Scan%03d_w%d_s%d_t1.TIF', i, iii, ii)))
-        
-        end 
-        
+    for iii = 1:wavelengths
+
+    reader.setSeries(tiles(ii)-1);
+    iPlane = reader.getIndex(0, iii - 1, 0) + 1;
+    tmpPlane  = bfGetPlane(reader, iPlane);
+
+    if ~p.Results.rotate == 0
+       tmpPlane = imrotate(tmpPlane, p.Results.rotate);
     end
-    
+
+    imwrite(tmpPlane, fullfile(outDir, sprintf('Scan001_w%d_s%d_t1.TIF', iii, ii)))
+
+    end 
+
 end
+    
 
 
 end
