@@ -73,8 +73,8 @@ function [] = nd2toTiff(inputFilesOrFolder,varargin)
 
 
 % The default MAP
-channelMap = containers.Map({'Brightfield', 'DAPI', 'YFP', 'YFP','YFPa','YFPb','YPFc','YPFd', 'CY3','CY3a','CY3b','CY3c','CY3d', 'A594', 'A594a', 'A594b', 'A594c', 'A594d', 'CY5','CY5a','CY5b','CY5c','CY5d', 'A647', '700', 'CY7','NIR'},...
-                            {'trans'      , 'dapi', 'gfp', 'gfp','gfpa','gfpb','gfpc','gfpd', 'tmr','tmra','tmrb','tmrc','tmrd', 'alexa','alexaa','alexab','alexac','alexad', 'cy','cya', 'cyb', 'cyc', 'cyd',  'cy'  , 'nir', 'nir','nir'});
+channelMap = containers.Map({'Brightfield', 'DAPI', 'YFP', 'YFP','YFPa','YFPb','YPFc','YPFd', 'CY3','CY3a','CY3b','CY3c','CY3d', 'A594', 'A594a', 'A594b', 'A594c', 'A594d', 'CY5','CY5a','CY5b','CY5c','CY5d', 'A647', '700', 'CY7','NIR', 'GOLD'},...
+                            {'trans'      , 'dapi', 'gfp', 'gfp','gfpa','gfpb','gfpc','gfpd', 'tmr','tmra','tmrb','tmrc','tmrd', 'alexa','alexaa','alexab','alexac','alexad', 'cy','cya', 'cyb', 'cyc', 'cyd',  'cy'  , 'nir', 'nir','nir', 'tmr'});
 
 
 % Input check
